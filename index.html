@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>人类一败涂地 3D Web版 (高度还原修复版)</title>
+    <title>人类一败涂地 3D Web极速版</title>
     <style>
         body {
             margin: 0;
@@ -11,74 +11,290 @@
             background-color: #dbe4eb;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             user-select: none;
-            -webkit-user-select: none;
         }
         #ui {
             position: absolute;
             top: 20px;
             left: 20px;
             color: #333;
-            background: rgba(255, 255, 255, 0.85);
+            background: rgba(255, 255, 255, 0.9);
             padding: 15px 25px;
             border-radius: 12px;
             pointer-events: none;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
             border: 1px solid rgba(255,255,255,0.5);
-            line-height: 1.6;
+            z-index: 10;
         }
-        h1 { margin: 0 0 8px 0; font-size: 18px; color: #2d3748; }
-        p { margin: 4px 0; font-size: 13px; color: #4a5568; }
-        span { color: #3182ce; font-weight: bold; }
-        #loader {
+        /* 错误控制台：如果卡死，这里会显示红字 */
+        #debug-log {
             position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: #dbe4eb; display: flex; justify-content: center;
-            align-items: center; z-index: 999; font-size: 24px; color: #4a5568;
-            transition: opacity 0.5s;
+            bottom: 20px;
+            left: 20px;
+            color: #ff3333;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            max-width: 80%;
+            display: none;
+            z-index: 100;
         }
+        h1 { margin: 0 0 10px 0; font-size: 18px; color: #2d3748; }
+        p { margin: 5px 0; font-size: 13px; color: #4a5568; }
+        .status { color: #2f855a; font-weight: bold; }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            const logBox = document.getElementById('debug-log');
+            if(logBox) {
+                logBox.style.display = 'block';
+                logBox.innerHTML = `⚠️ 运行报错: ${message} <br> 位置: 行 ${lineno}, 列 ${colno}`;
+            }
+            return false;
+        };
+    </script>
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/cannon.js/0.0.8/cannon.min.js"></script>
 </head>
 <body>
 
-    <div id="loader">正在加载 3D 物理世界...</div>
-
     <div id="ui">
-        <h1>人类一败涂地 - Web Simulator</h1>
-        <p>🕹️ <b>移动：</b><span>W A S D</span>（随视角自动转向）</p>
-        <p>👀 <b>视角：</b><span>按住鼠标左键并拖拽</span> 360°旋转镜头</p>
-        <p>🖐️ <b>灵魂动作：</b><span>按住鼠标右键 / 键盘 E 键</span> 高举双手</p>
-        <p>🦘 <b>跳跃：</b><span>空格键 (SPACE)</span> 魔性起跳</p>
+        <h1>人类一败涂地 (Web 3D版)</h1>
+        <p>🎮 <b>人物移动：</b>键盘 W、A、S、D</p>
+        <p>🦘 <b>快乐跳跃：</b>Space (空格键)</p>
+        <p>✨ <b>高度还原：</b>魔性软骨走姿、甩动机枪手、纯重力大门与障碍箱</p>
+        <p class="status">🟢 引擎状态：国内极速节点已就绪，正在畅玩</p>
     </div>
 
+    <div id="debug-log"></div>
+
     <script>
-        // --- 1. 场景基础设置 ---
+        // 确保物理和渲染库都加载成功
+        if (typeof THREE === 'undefined' || typeof CANNON === 'undefined') {
+            throw new Error("3D或物理引擎CDN加载失败，请刷新网页重试！");
+        }
+
+        // --- 1. 核心 3D 渲染器初始化 ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xdbe4eb); // 标志性粘土蓝天空
+        scene.background = new THREE.Color(0xdbe4eb); 
         scene.fog = new THREE.FogExp2(0xdbe4eb, 0.015);
 
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        // 隐藏加载提示
-        document.getElementById('loader').style.opacity = 0;
-        setTimeout(() => document.getElementById('loader').remove(), 500);
-
-        // --- 2. 灯光系统（还原低模软阴影） ---
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        // 还原低模风格光照
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
-
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
         dirLight.position.set(20, 40, 20);
         dirLight.castShadow = true;
-        dirLight.shadow.mapSize.width = 2048;
-        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.mapSize.width = 1024; // 适度降低阴影贴图分辨率防低配机卡顿
+        dirLight.shadow.mapSize.height = 1024;
         dirLight.shadow.camera.near = 0.5;
         dirLight.shadow.camera.far = 100;
-        const d = 25;
-        dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
-        dirLight.shadow.
+        const d = 30;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        // --- 2. 物理世界配置 (CANNON) ---
+        const world = new CANNON.World();
+        world.gravity.set(0, -16, 0); 
+        world.broadphase = new CANNON.NaiveBroadphase();
+        world.solver.iterations = 10;
+
+        const baseMaterial = new CANNON.Material("baseMaterial");
+        const contactMaterial = new CANNON.ContactMaterial(baseMaterial, baseMaterial, {
+            friction: 0.3,
+            restitution: 0.1
+        });
+        world.addContactMaterial(contactMaterial);
+
+        // --- 3. 游戏大地层 ---
+        const groundShape = new CANNON.Plane();
+        const groundBody = new CANNON.Body({ mass: 0, material: baseMaterial });
+        groundBody.addShape(groundShape);
+        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+        world.addBody(groundBody);
+
+        const groundMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(200, 200),
+            new THREE.MeshStandardMaterial({ color: 0xb0c4de, roughness: 0.9 })
+        );
+        groundMesh.rotation.x = -Math.PI / 2;
+        groundMesh.receiveShadow = true;
+        scene.add(groundMesh);
+
+        // --- 4. 物理关卡制造机 ---
+        const physicsObjects = [];
+
+        function createBox(x, y, z, w, h, d, mass, color) {
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(w, h, d),
+                new THREE.MeshStandardMaterial({ color: color, roughness: 0.6 })
+            );
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+
+            const body = new CANNON.Body({ mass: mass, material: baseMaterial });
+            body.addShape(new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)));
+            body.position.set(x, y, z);
+            world.addBody(body);
+
+            physicsObjects.push({ mesh, body });
+            return body;
+        }
+
+        // 经典解密关卡1：堵在路中间的巨大物理双开红木门
+        createBox(-2.1, 3, -4, 2, 6, 0.4, 12, 0xbf616a); // 左扇门
+        createBox(2.1, 3, -4, 2, 6, 0.4, 12, 0xbf616a);  // 右扇门
+        createBox(-3.5, 3, -4, 0.8, 6, 0.8, 0, 0x4c566a); // 固定门柱
+        createBox(3.5, 3, -4, 0.8, 6, 0.8, 0, 0x4c566a); 
+
+        // 经典解密关卡2：大门后方的可堆叠、可推搡箱子高塔
+        for(let i=0; i<4; i++) {
+            createBox(-1, 0.7 + i*1.3, -10, 1.2, 1.2, 1.2, 4, 0xd8dee9);
+            createBox(1, 0.7 + i*1.3, -10, 1.2, 1.2, 1.2, 4, 0xe5e9f0);
+        }
+
+        // --- 5. 拼装主角：魔性面条人 ---
+        const playerGroup = new THREE.Group();
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xf3f4f6, roughness: 0.7 });
+        
+        // 躯干
+        const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.4, 1.4, 16), skinMat);
+        torso.castShadow = true;
+        playerGroup.add(torso);
+
+        // 汤圆头
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), skinMat);
+        head.position.y = 1.0;
+        head.castShadow = true;
+        playerGroup.add(head);
+
+        // 面条长手臂
+        const armGeo = new THREE.CylinderGeometry(0.12, 0.12, 1.0, 8);
+        const leftArm = new THREE.Mesh(armGeo, skinMat);
+        leftArm.position.set(-0.65, 0.3, 0);
+        leftArm.castShadow = true;
+        playerGroup.add(leftArm);
+
+        const rightArm = new THREE.Mesh(armGeo, skinMat);
+        rightArm.position.set(0.65, 0.3, 0);
+        rightArm.castShadow = true;
+        playerGroup.add(rightArm);
+
+        scene.add(playerGroup);
+
+        // 玩家物理核心（超稳长方体刚体）
+        const playerBody = new CANNON.Body({ mass: 70, material: baseMaterial });
+        playerBody.addShape(new CANNON.Box(new CANNON.Vec3(0.5, 1.1, 0.5)));
+        playerBody.position.set(0, 4, 6); // 从高空坠落登场
+        playerBody.angularDamping = 0.95; // 高阻尼保护，防止角色被大门撞飞后产生诡异的自转
+        world.addBody(playerBody);
+
+        // --- 6. 核心输入锁 ---
+        const keys = { w: false, a: false, s: false, d: false, space: false };
+        window.addEventListener('keydown', (e) => { toggleKey(e, true); });
+        window.addEventListener('keyup', (e) => { toggleKey(e, false); });
+
+        function toggleKey(e, isPressed) {
+            switch (e.code) {
+                case 'KeyW': keys.w = isPressed; break;
+                case 'KeyA': keys.a = isPressed; break;
+                case 'KeyS': keys.s = isPressed; break;
+                case 'KeyD': keys.d = isPressed; break;
+                case 'Space': keys.space = isPressed; break;
+            }
+        }
+
+        // --- 7. 物理驱动主循环 ---
+        const timeStep = 1 / 60;
+        let waveClock = 0;
+
+        function runEngine() {
+            requestAnimationFrame(runEngine);
+
+            // 推动物理沙盒世界前进
+            world.step(timeStep);
+
+            // 读取指令转换速度
+            const walkSpeed = 6;
+            let mx = 0;
+            let mz = 0;
+
+            if (keys.w) mz -= walkSpeed;
+            if (keys.s) mz += walkSpeed;
+            if (keys.a) mx -= walkSpeed;
+            if (keys.d) mx += walkSpeed;
+
+            playerBody.velocity.x = mx;
+            playerBody.velocity.z = mz;
+
+            // 物理跳跃
+            if (keys.space && Math.abs(playerBody.velocity.y) < 0.1 && playerBody.position.y < 1.5) {
+                playerBody.velocity.y = 7.5;
+            }
+
+            // 同步物理大底座到面条人渲染模型
+            playerGroup.position.copy(playerBody.position);
+            
+            // 还原《人类一败涂地》招牌动作：无骨走路晃动与魔性摆臂
+            if (mx !== 0 || mz !== 0) {
+                waveClock += 0.25;
+                
+                // 走动时身体产生骨折般的喜感扭动
+                playerGroup.rotation.z = Math.sin(waveClock) * 0.12;
+                playerGroup.rotation.x = Math.cos(waveClock) * 0.08 - 0.08;
+                
+                // 自动平滑修正面条人的身体面朝向
+                playerGroup.rotation.y = Math.atan2(-mx, -mz);
+
+                // 两条长手臂做无意识、软绵绵的前后甩动
+                leftArm.rotation.x = Math.sin(waveClock) * 0.6;
+                rightArm.rotation.x = -Math.sin(waveClock) * 0.6;
+            } else {
+                // 原地待机时微弱的呼吸起伏感
+                waveClock += 0.04;
+                playerGroup.rotation.z = Math.sin(waveClock) * 0.03;
+                playerGroup.rotation.x = 0;
+                
+                leftArm.rotation.x = Math.sin(waveClock) * 0.05;
+                rightArm.rotation.x = Math.cos(waveClock) * 0.05;
+            }
+
+            // 遍历并刷新场景中所有可移动的受力关卡物件（大门、木箱）
+            for (let i = 0; i < physicsObjects.length; i++) {
+                physicsObjects[i].mesh.position.copy(physicsObjects[i].body.position);
+                physicsObjects[i].mesh.quaternion.copy(physicsObjects[i].body.quaternion);
+            }
+
+            // 高度还原：平滑的第三人称背后追随相机
+            camera.position.set(playerBody.position.x, playerBody.position.y + 6, playerBody.position.z + 10);
+            camera.lookAt(playerBody.position.x, playerBody.position.y + 0.8, playerBody.position.z);
+
+            // 完美的最终相机画布输出
+            renderer.render(scene, camera);
+        }
+
+        // 自适应视口缩放
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // 轰鸣起航
+        runEngine();
+    </script>
+</body>
+</html>
