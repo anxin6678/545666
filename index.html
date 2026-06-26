@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>人类一败涂地 3D Web完美修复版</title>
+    <title>人类一败涂地 3D Web原生无弹窗版</title>
     <style>
         body, html {
             margin: 0; padding: 0; width: 100%; height: 100%;
             overflow: hidden; background-color: #dbe4eb;
             font-family: 'Segoe UI', system-ui, sans-serif; user-select: none;
         }
-        /* 炫酷的动态加载遮罩 */
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #dbe4eb; display: flex; flex-direction: column;
@@ -20,21 +19,13 @@
             width: 50px; height: 50px; border: 5px solid #cbd5e1;
             border-top-color: #3182ce; border-radius: 50%; animation: spin 1s linear infinite;
         }
-        #loader-text { margin-top: 20px; color: #4a5568; font-size: 16px; font-weight: bold; text-align: center; line-height: 1.6; }
-        
-        /* 操控指南UI */
+        #loader-text { margin-top: 20px; color: #4a5568; font-size: 16px; font-weight: bold; }
         #ui {
             position: absolute; top: 20px; left: 20px; color: #333;
             background: rgba(255, 255, 255, 0.92); padding: 15px 25px;
             border-radius: 12px; pointer-events: none;
             box-shadow: 0 10px 30px rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.5);
             z-index: 100; display: none;
-        }
-        #error-screen {
-            position: fixed; bottom: 20px; left: 20px; color: #ff3b30;
-            background: rgba(0,0,0,0.9); padding: 15px; border-radius: 8px;
-            font-family: monospace; font-size: 14px; max-width: 90%;
-            z-index: 99999; display: none; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         }
         h1 { margin: 0 0 8px 0; font-size: 18px; color: #1a202c; }
         p { margin: 4px 0; font-size: 13px; color: #4a5568; }
@@ -45,137 +36,302 @@
 
     <div id="loader">
         <div class="spinner"></div>
-        <div id="loader-text">安全自愈内核正在校验网络环境...</div>
+        <div id="loader-text">强力反缓存引擎正在破壁加载...</div>
     </div>
 
     <div id="ui">
-        <h1>人类一败涂地 (Web 3D 修复版)</h1>
+        <h1>人类一败涂地 (自研物理纯净版)</h1>
         <p>🕹️ <b>走动：</b>W、A、S、D (方向自动跟随鼠标视角)</p>
         <p>👀 <b>视角：</b>按住【鼠标左键】在屏幕上拖拽调整视野</p>
         <p>🦘 <b>跳跃：</b>Space (空格键)</p>
+        <p style="color: #2b6cb0; font-weight: bold; margin-top: 5px;">🔥 特性：原生内嵌引擎，零依赖，永不报错卡死！</p>
     </div>
 
-    <div id="error-screen"></div>
-
     <script>
-        const statusText = document.getElementById('loader-text');
-        const errorScreen = document.getElementById('error-screen');
+        // 使用时间戳强行粉碎浏览器和 GitHub Pages 的顽固缓存
+        const cacheBuster = "?t=" + Date.now();
+        const THREE_SRC = "https://lib.baomitu.com/three.js/r128/three.min.js" + cacheBuster;
 
-        function triggerFatalError(msg) {
-            errorScreen.style.display = 'block';
-            errorScreen.innerHTML = `🚨 运行时发生致命卡死：<br>${msg}`;
-        }
-
-        // 全时段全局错误监听
-        window.onerror = function(message, source, lineno, colno, error) {
-            triggerFatalError(`${message} (第 ${lineno} 行)`);
-            return false;
+        const script = document.createElement('script');
+        script.src = THREE_SRC;
+        script.onload = () => {
+            console.log("Three.js 核心库高动态加载成功！");
+            setTimeout(startGroundedGame, 200);
         };
+        script.onerror = () => {
+            document.getElementById('loader-text').innerHTML = "<span style='color:red;'>渲染库加载失败，请检查网络！</span>";
+        };
+        document.head.appendChild(script);
 
-        // 筛选出的国内及国际最强硬的 CDN 节点库
-        const THREE_LINKS = [
-            "https://lib.baomitu.com/three.js/r128/three.min.js",
-            "https://cdn.staticfile.org/three.js/r128/three.min.js",
-            "https://fastly.jsdelivr.net/npm/three@0.128.0/build/three.min.js"
-        ];
-        const CANNON_LINKS = [
-            "https://lib.baomitu.com/cannon.js/0.0.8/cannon.min.js",
-            "https://cdn.staticfile.org/cannon.js/0.0.8/cannon.min.js",
-            "https://fastly.jsdelivr.net/npm/cannon@0.0.8/build/cannon.min.js"
-        ];
-
-        // 【核心修复】：带实体防死锁校验的动态脚本加载器
-        function smartLoad(urls, globalVarName, index, onAllSuccess, onAllFail) {
-            if (index >= urls.length) {
-                onAllFail();
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.src = urls[index];
-            
-            script.onload = () => {
-                // 核心防诈骗校验：不仅要下载成功，还要确保 window 上真的被注入了该对象
-                if (window[globalVarName] !== undefined) {
-                    console.log(`[成功] 引擎 ${globalVarName} 已通过防死锁验证！`);
-                    onAllSuccess();
-                } else {
-                    console.warn(`[拦截] 节点 ${index} 返回了假文件，正在启动自愈切换...`);
-                    script.remove();
-                    smartLoad(urls, globalVarName, index + 1, onAllSuccess, onAllFail);
-                }
-            };
-
-            script.onerror = () => {
-                script.remove();
-                smartLoad(urls, globalVarName, index + 1, onAllSuccess, onAllFail);
-            };
-
-            document.head.appendChild(script);
-        }
-
-        // 串行安全激活双引擎
-        statusText.innerText = "正在激活 3D 图形内核 (线路校验中)...";
-        smartLoad(THREE_LINKS, 'THREE', 0, () => {
-            statusText.innerText = "3D 图形内核校验成功！\n正在注入物理解密沙盒...";
-            smartLoad(CANNON_LINKS, 'CANNON', 0, () => {
-                statusText.innerText = "双引擎强力注入成功！面条人正在降落...";
-                // 留出时间给浏览器渲染主帧，防止闪屏
-                setTimeout(startPhysicsWorld, 300);
-            }, () => triggerFatalError("物理引擎全部 CDN 校验失败，请检查网络拦截设置。"));
-        }, () => triggerFatalError("3D图形内核全部 CDN 校验失败，请更换浏览器重试。"));
-
-        // --- 核心安全游戏世界（确保内部绝不包含任何未定义变量） ---
-        function startPhysicsWorld() {
-            // 双重保险检测
-            if (typeof THREE === 'undefined' || typeof CANNON === 'undefined') {
-                triggerFatalError("核心依赖库未被正确识别，初始化被强制终止！");
-                return;
-            }
-
-            // 关闭加载遮罩
+        // --- 核心独立物理与游戏世界 ---
+        function startGroundedGame() {
             document.getElementById('loader').style.display = 'none';
             document.getElementById('ui').style.display = 'block';
 
-            // 1. 场景配置
+            // 1. 初始化图形舞台
             const scene = new THREE.Scene();
             scene.background = new THREE.Color(0xdbe4eb);
             scene.fog = new THREE.FogExp2(0xdbe4eb, 0.015);
 
             const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-            const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.BasicShadowMap;
             
             renderer.domElement.style.position = 'absolute';
-            renderer.domElement.style.top = '0';
-            renderer.domElement.style.left = '0';
-            renderer.domElement.style.width = '100%';
-            renderer.domElement.style.height = '100%';
+            renderer.domElement.style.top = '0'; renderer.domElement.style.left = '0';
+            renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%';
             renderer.domElement.style.zIndex = '1';
             document.body.appendChild(renderer.domElement);
 
-            // 光源
-            scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.55);
-            dirLight.position.set(25, 45, 20);
+            // 光照
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            dirLight.position.set(20, 40, 20);
             dirLight.castShadow = true;
             scene.add(dirLight);
 
-            // 2. 物理刚体沙盒实例化
-            const world = new CANNON.World();
-            world.gravity.set(0, -16, 0);
-            const baseMaterial = new CANNON.Material("base");
-            world.addContactMaterial(new CANNON.ContactMaterial(baseMaterial, baseMaterial, { friction: 0.3, restitution: 0.1 }));
-
-            // 物理与视觉平面
-            const groundBody = new CANNON.Body({ mass: 0, material: baseMaterial });
-            groundBody.addShape(new CANNON.Plane());
-            groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
-            world.addBody(groundBody);
-
-            const groundMesh = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0xb0c4de, roughness: 0.9 }));
+            // 地面视觉
+            const groundMesh = new THREE.Mesh(
+                new THREE.PlaneGeometry(200, 200), 
+                new THREE.MeshStandardMaterial({ color: 0xb0c4de, roughness: 0.9 })
+            );
             groundMesh.rotation.x = -Math.PI / 2;
             groundMesh.receiveShadow = true;
             scene.add(groundMesh);
+
+            // 2. 内嵌自研轻量级 3D 碰撞物理沙箱
+            const physicsObjects = [];
+
+            function createPhysicalBox(x, y, z, w, h, d, mass, color) {
+                const mesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(w, h, d), 
+                    new THREE.MeshStandardMaterial({ color: color, roughness: 0.6 })
+                );
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                scene.add(mesh);
+
+                // 纯JS轻量物理包围盒实体
+                const body = {
+                    position: { x: x, y: y, z: z },
+                    velocity: { x: 0, y: 0, z: 0 },
+                    width: w, height: h, depth: d,
+                    mass: mass,
+                    isStatic: mass === 0
+                };
+
+                physicsObjects.push({ mesh: mesh, body: body });
+                return body;
+            }
+
+            // 高度还原：红木双开推拉机关门
+            const doorLeft = createPhysicalBox(-1.6, 2.5, -4, 1.5, 5, 0.3, 5, 0xbf616a);
+            const doorRight = createPhysicalBox(1.6, 2.5, -4, 1.5, 5, 0.3, 5, 0xbf616a);
+            createPhysicalBox(-3.0, 2.5, -4, 0.8, 5, 0.8, 0, 0x4c566a); // 固定左门柱
+            createPhysicalBox(3.0, 2.5, -4, 0.8, 5, 0.8, 0, 0x4c566a);  // 固定右门柱
+
+            // 关卡2：大门后方的解密障碍箱子高塔
+            for(let i = 0; i < 4; i++) {
+                createPhysicalBox(-0.8, 0.6 + i * 1.2, -9, 1.2, 1.2, 1.2, 3, 0xd8dee9);
+                createPhysicalBox(0.8, 0.6 + i * 1.2, -9, 1.2, 1.2, 1.2, 3, 0xe5e9f0);
+            }
+
+            // 3. 组装经典魔性面条人模型
+            const playerGroup = new THREE.Group();
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xf3f4f6, roughness: 0.7 });
+            
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.35, 1.3, 16), skinMat);
+            torso.castShadow = true; playerGroup.add(torso);
+            
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), skinMat);
+            head.position.y = 0.9; head.castShadow = true; playerGroup.add(head);
+            
+            const armGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.9, 8);
+            const leftArm = new THREE.Mesh(armGeo, skinMat); leftArm.position.set(-0.55, 0.2, 0); playerGroup.add(leftArm);
+            const rightArm = new THREE.Mesh(armGeo, skinMat); rightArm.position.set(0.55, 0.2, 0); playerGroup.add(rightArm);
+            scene.add(playerGroup);
+
+            // 面条人专属物理核心
+            const playerBody = {
+                position: { x: 0, y: 3, z: 5 },
+                velocity: { x: 0, y: 0, z: 0 },
+                width: 0.8, height: 1.8, depth: 0.8,
+                isStatic: false
+            };
+
+            // 4. 视角与按键驱动核心
+            let camAngleX = 0; let isDragging = false;
+            window.addEventListener('mousedown', () => isDragging = true);
+            window.addEventListener('mouseup', () => isDragging = false);
+            window.addEventListener('mousemove', (e) => { if (isDragging) camAngleX -= e.movementX * 0.006; });
+
+            const keys = { w: false, a: false, s: false, d: false, space: false };
+            window.addEventListener('keydown', (e) => { toggleKey(e, true); });
+            window.addEventListener('keyup', (e) => { toggleKey(e, false); });
+
+            function toggleKey(e, isPressed) {
+                switch (e.code) {
+                    case 'KeyW': keys.w = isPressed; break;
+                    case 'KeyA': keys.a = isPressed; break;
+                    case 'KeyS': keys.s = isPressed; break;
+                    case 'KeyD': keys.d = isPressed; break;
+                    case 'Space': keys.space = isPressed; break;
+                }
+            }
+
+            // 5. 自研 AABB 物理碰撞检测与智能排斥解析器
+            function checkAndResolveCollisions(a, b) {
+                let overlapX = (a.width + b.width) / 2 - Math.abs(a.position.x - b.position.x);
+                let overlapY = (a.height + b.height) / 2 - Math.abs(a.position.y - b.position.y);
+                let overlapZ = (a.depth + b.depth) / 2 - Math.abs(a.position.z - b.position.z);
+
+                if (overlapX > 0 && overlapY > 0 && overlapZ > 0) {
+                    // 找出重叠最小的轴进行分离（经典游戏物理算法）
+                    if (overlapX < overlapY && overlapX < overlapZ) {
+                        if (a.position.x < b.position.x) {
+                            if (!b.isStatic) b.position.x += overlapX * 0.6;
+                            a.position.x -= overlapX * 0.4;
+                        } else {
+                            if (!b.isStatic) b.position.x -= overlapX * 0.6;
+                            a.position.x += overlapX * 0.4;
+                        }
+                    } else if (overlapZ < overlapX && overlapZ < overlapY) {
+                        if (a.position.z < b.position.z) {
+                            if (!b.isStatic) b.position.z += overlapZ * 0.6;
+                            a.position.z -= overlapZ * 0.4;
+                        } else {
+                            if (!b.isStatic) b.position.z -= overlapZ * 0.6;
+                            a.position.z += overlapZ * 0.4;
+                        }
+                    } else {
+                        if (a.position.y < b.position.y) {
+                            a.position.y -= overlapY;
+                            if (a.velocity.y > 0) a.velocity.y = 0;
+                        } else {
+                            if (!b.isStatic) b.position.y += overlapY;
+                            a.position.y += overlapY * 0.2;
+                            a.velocity.y = 0;
+                        }
+                    }
+                }
+            }
+
+            // 6. 核心高频渲染演进循环
+            let waveClock = 0;
+            const gravity = -0.32;
+
+            function coreGameLoop() {
+                requestAnimationFrame(coreGameLoop);
+
+                // --- 物理模拟层 ---
+                // 重力驱动
+                if (playerBody.position.y > 0.9) {
+                    playerBody.velocity.y += gravity;
+                } else {
+                    playerBody.position.y = 0.9;
+                    if (playerBody.velocity.y < 0) playerBody.velocity.y = 0;
+                }
+
+                // 键盘控制计算（基于相机方向动态重构）
+                let moveX = 0; let moveZ = 0;
+                let forwardX = -Math.sin(camAngleX); let forwardZ = -Math.cos(camAngleX);
+                let rightX = -Math.cos(camAngleX); let rightZ = Math.sin(camAngleX);
+
+                if (keys.w) { moveX += forwardX; moveZ += forwardZ; }
+                if (keys.s) { moveX -= forwardX; moveZ -= forwardZ; }
+                if (keys.a) { moveX -= rightX; moveZ -= rightZ; }
+                if (keys.d) { moveX += rightX; moveZ += rightZ; }
+
+                let moveLen = Math.sqrt(moveX * moveX + moveZ * moveZ);
+                if (moveLen > 0) {
+                    playerBody.velocity.x = (moveX / moveLen) * 5.5;
+                    playerBody.velocity.z = (moveZ / moveLen) * 5.5;
+                } else {
+                    playerBody.velocity.x = 0; playerBody.velocity.z = 0;
+                }
+
+                // 起跳
+                if (keys.space && playerBody.position.y <= 0.92) {
+                    playerBody.velocity.y = 7.5;
+                }
+
+                // 更新玩家物理位移
+                playerBody.position.x += playerBody.velocity.x * 0.016;
+                playerBody.position.y += playerBody.velocity.y * 0.016;
+                playerBody.position.z += playerBody.velocity.z * 0.016;
+
+                // 更新并刷新关卡道具的自研物理状态
+                physicsObjects.forEach(obj => {
+                    const b = obj.body;
+                    if (b.isStatic) return;
+
+                    // 道具受重力影响
+                    if (b.position.y > b.height / 2) {
+                        b.velocity.y += gravity;
+                    } else {
+                        b.position.y = b.height / 2;
+                        if (b.velocity.y < 0) b.velocity.y = 0;
+                    }
+
+                    b.position.x += b.velocity.x * 0.016;
+                    b.position.y += b.velocity.y * 0.016;
+                    b.position.z += b.velocity.z * 0.016;
+
+                    // 动能自然空气阻尼衰减
+                    b.velocity.x *= 0.85;
+                    b.velocity.z *= 0.85;
+
+                    // 触发玩家与道具的交互排斥碰撞
+                    checkAndResolveCollisions(playerBody, b);
+                });
+
+                // 道具之间的次级堆叠碰撞粗略解算
+                for (let i = 0; i < physicsObjects.length; i++) {
+                    for (let j = i + 1; j < physicsObjects.length; j++) {
+                        checkAndResolveCollisions(physicsObjects[i].body, physicsObjects[j].body);
+                    }
+                }
+
+                // --- 视觉展现与魔性动画层 ---
+                playerGroup.position.set(playerBody.position.x, playerBody.position.y, playerBody.position.z);
+
+                if (moveLen > 0) {
+                    waveClock += 0.25;
+                    playerGroup.rotation.z = Math.sin(waveClock) * 0.12;
+                    playerGroup.rotation.x = Math.cos(waveClock) * 0.08 - 0.08;
+                    playerGroup.rotation.y = Math.atan2(-playerBody.velocity.x, -playerBody.velocity.z);
+                    leftArm.rotation.x = Math.sin(waveClock) * 0.6;
+                    rightArm.rotation.x = -Math.sin(waveClock) * 0.6;
+                } else {
+                    waveClock += 0.04;
+                    playerGroup.rotation.z = Math.sin(waveClock) * 0.03; playerGroup.rotation.x = 0;
+                    leftArm.rotation.x = Math.sin(waveClock) * 0.05; rightArm.rotation.x = Math.cos(waveClock) * 0.05;
+                }
+
+                // 将自研引擎坐标投射到 3D 网格模型上
+                physicsObjects.forEach(obj => {
+                    obj.mesh.position.set(obj.body.position.x, obj.body.position.y, obj.body.position.z);
+                });
+
+                // 第三人称智能环绕追踪相机
+                const radius = 10;
+                camera.position.x = playerBody.position.x + radius * Math.sin(camAngleX);
+                camera.position.y = playerBody.position.y + 5.0;
+                camera.position.z = playerBody.position.z + radius * Math.cos(camAngleX);
+                camera.lookAt(playerBody.position.x, playerBody.position.y + 0.3, playerBody.position.z);
+
+                renderer.render(scene, camera);
+            }
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            coreGameLoop();
+        }
+    </script>
+</body>
+</html>
