@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>人类一败涂地 3D Web大厂加速版</title>
+    <title>人类一败涂地 3D Web终极修复版</title>
     <style>
         body, html {
             margin: 0; padding: 0; width: 100%; height: 100%;
             overflow: hidden; background-color: #dbe4eb;
             font-family: 'Segoe UI', system-ui, sans-serif; user-select: none;
         }
+        /* 加载遮罩 */
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #dbe4eb; display: flex; flex-direction: column;
@@ -19,13 +20,22 @@
             width: 50px; height: 50px; border: 5px solid #cbd5e1;
             border-top-color: #3182ce; border-radius: 50%; animation: spin 1s linear infinite;
         }
-        #loader-text { margin-top: 20px; color: #4a5568; font-size: 16px; font-weight: bold; text-align: center; padding: 0 10px; }
+        #loader-text { margin-top: 20px; color: #4a5568; font-size: 16px; font-weight: bold; }
+        
+        /* 游戏操控UI面板 */
         #ui {
             position: absolute; top: 20px; left: 20px; color: #333;
-            background: rgba(255, 255, 255, 0.9); padding: 15px 25px;
+            background: rgba(255, 255, 255, 0.92); padding: 15px 25px;
             border-radius: 12px; pointer-events: none;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.5);
-            z-index: 10; display: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.5);
+            z-index: 100; display: none;
+        }
+        /* 实时全时段报错看板 */
+        #debug-screen {
+            position: fixed; bottom: 20px; left: 20px; color: #ff3b30;
+            background: rgba(0,0,0,0.85); padding: 15px; border-radius: 8px;
+            font-family: monospace; font-size: 14px; max-width: 90%;
+            z-index: 99999; display: none; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         }
         h1 { margin: 0 0 8px 0; font-size: 18px; color: #1a202c; }
         p { margin: 4px 0; font-size: 13px; color: #4a5568; }
@@ -36,86 +46,97 @@
 
     <div id="loader">
         <div class="spinner"></div>
-        <div id="loader-text">正在链接大厂加速通道...</div>
+        <div id="loader-text">自愈引擎正在加载底层依赖...</div>
     </div>
 
     <div id="ui">
         <h1>人类一败涂地 (Web 3D 修复版)</h1>
-        <p>🕹️ <b>走动：</b>W、A、S、D (方向跟随视角)</p>
-        <p>👀 <b>视角：</b>按住【鼠标左键】在屏幕上拖拽</p>
+        <p>🕹️ <b>走动：</b>W、A、S、D (自动跟随鼠标视角)</p>
+        <p>👀 <b>视角：</b>按住【鼠标左键】并在屏幕上拖拽</p>
         <p>🦘 <b>跳跃：</b>Space (空格键)</p>
     </div>
 
-    <script>
-        const statusText = document.getElementById('loader-text');
+    <div id="debug-screen"></div>
 
-        // --- 核心改动：加入了国内最强、最稳定的两家大厂公开 CDN 节点 ---
+    <script>
+        // 全时段报错雷达：拒绝任何静默黑屏
+        const debugScreen = document.getElementById('debug-screen');
+        function showError(msg) {
+            debugScreen.style.display = 'block';
+            debugScreen.innerHTML = `🚨 运行异常引发卡死：<br>${msg}`;
+        }
+        window.onerror = function(message, source, lineno, colno, error) {
+            showError(`${message} (第 ${lineno} 行)`);
+            return false;
+        };
+
+        // 三路大厂骨干网 CDN 备用链
         const THREE_SOURCES = [
-            "https://cdn.staticfile.org/three.js/r128/three.min.js", // 七牛云/国内顶尖CDN
-            "https://lib.baomitu.com/three.js/r128/three.min.js",   // 360 鲍米图加速
-            "./three.min.js"                                         // 离线备用本地路径
+            "https://cdn.staticfile.org/three.js/r128/three.min.js",
+            "https://lib.baomitu.com/three.js/r128/three.min.js",
+            "https://fastly.jsdelivr.net/npm/three@0.128.0/build/three.min.js"
         ];
         const CANNON_SOURCES = [
-            "https://cdn.staticfile.org/cannon.js/0.0.8/cannon.min.js", // 七牛云
-            "https://lib.baomitu.com/cannon.js/0.0.8/cannon.min.js",   // 360 鲍米图
-            "./cannon.min.js"                                           // 离线备用本地路径
+            "https://cdn.staticfile.org/cannon.js/0.0.8/cannon.min.js",
+            "https://lib.baomitu.com/cannon.js/0.0.8/cannon.min.js",
+            "https://fastly.jsdelivr.net/npm/cannon@0.0.8/build/cannon.min.js"
         ];
 
-        function loadScriptWithFallback(sources, index, successCallback, errorCallback) {
-            if (index >= sources.length) {
-                errorCallback();
-                return;
-            }
+        function loadScriptWithFallback(sources, index, success, fail) {
+            if (index >= sources.length) { fail(); return; }
             const script = document.createElement('script');
             script.src = sources[index];
-            script.onload = successCallback;
-            script.onerror = () => {
-                console.warn(`节点 ${index} 加载失败，自动尝试下一大厂线路...`);
-                loadScriptWithFallback(sources, index + 1, successCallback, errorCallback);
-            };
+            script.onload = success;
+            script.onerror = () => loadScriptWithFallback(sources, index + 1, success, fail);
             document.head.appendChild(script);
         }
 
-        // 执行双重自愈加载
-        statusText.innerText = "正在通过七牛云/360骨干网加载3D内核...";
+        const statusText = document.getElementById('loader-text');
+        statusText.innerText = "正在链接 3D 图形内核...";
         loadScriptWithFallback(THREE_SOURCES, 0, () => {
-            statusText.innerText = "3D内核就绪！正在加载物理引擎...";
+            statusText.innerText = "正在激活高级物理沙盒...";
             loadScriptWithFallback(CANNON_SOURCES, 0, () => {
-                statusText.innerText = "物理沙箱就绪！面条人正在降落...";
+                statusText.innerText = "正在拼装面条人世界...";
                 setTimeout(initGame, 200);
-            }, () => {
-                statusText.innerHTML = "<span style='color:red;'>⚠️ 物理引擎加载失败。<br>请按照下方“终极本地化方案”把引擎文件下载到你的 GitHub 仓库中！</span>";
-            });
-        }, () => {
-            statusText.innerHTML = "<span style='color:red;'>⚠️ 3D渲染内核加载失败。<br>请按照下方“终极本地化方案”把引擎文件下载到你的 GitHub 仓库中！</span>";
-        });
+            }, () => showError("物理引擎全线加载失败"));
+        }, () => showError("3D引擎全线加载失败"));
 
-        // --- 游戏核心逻辑（WebGL 与物理绑定） ---
+        // --- 核心游戏沙盒 ---
         function initGame() {
+            // 隐藏加载层
             document.getElementById('loader').style.display = 'none';
             document.getElementById('ui').style.display = 'block';
 
+            // 1. 搭建舞台
             const scene = new THREE.Scene();
             scene.background = new THREE.Color(0xdbe4eb);
             scene.fog = new THREE.FogExp2(0xdbe4eb, 0.015);
 
             const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            
+            // 增强显卡阴影兼容性，防止低配GPU引发编译黑屏
             renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.shadowMap.type = THREE.BasicShadowMap; 
+            
+            // 样式绝对定位，强制置底布局
+            renderer.domElement.style.position = 'absolute';
+            renderer.domElement.style.top = '0';
+            renderer.domElement.style.left = '0';
+            renderer.domElement.style.width = '100%';
+            renderer.domElement.style.height = '100%';
+            renderer.domElement.style.zIndex = '1';
             document.body.appendChild(renderer.domElement);
 
             // 光照
-            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-            dirLight.position.set(30, 50, 20);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.55);
+            dirLight.position.set(25, 45, 20);
             dirLight.castShadow = true;
-            dirLight.shadow.mapSize.width = 1024;
-            dirLight.shadow.mapSize.height = 1024;
             scene.add(dirLight);
 
-            // 物理世界
+            // 2. 物理世界配置
             const world = new CANNON.World();
             world.gravity.set(0, -16, 0);
             const baseMaterial = new CANNON.Material("base");
@@ -132,7 +153,7 @@
             groundMesh.receiveShadow = true;
             scene.add(groundMesh);
 
-            // 关卡道具
+            // 3. 制造物理可动机关道具
             const physicsObjects = [];
             function createBox(x, y, z, w, h, d, mass, color) {
                 const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: color, roughness: 0.6 }));
@@ -144,45 +165,50 @@
                 body.position.set(x, y, z);
                 world.addBody(body);
 
-                physicsObjects.push({ mesh, body });
+                physicsObjects.push({ mesh: mesh, body: body });
             }
 
-            // 红木双开门与门柱
+            // 标志性物理红木门
             createBox(-2.1, 3, -4, 2, 6, 0.4, 12, 0xbf616a);
             createBox(2.1, 3, -4, 2, 6, 0.4, 12, 0xbf616a);
-            createBox(-3.5, 3, -4, 0.8, 6, 0.8, 0, 0x4c566a);
+            createBox(-3.5, 3, -4, 0.8, 6, 0.8, 0, 0x4c566a); // 门柱
             createBox(3.5, 3, -4, 0.8, 6, 0.8, 0, 0x4c566a);
 
-            // 障碍箱
+            // 门后障碍高塔箱子
             for(let i=0; i<4; i++) {
                 createBox(-1, 0.7 + i*1.3, -10, 1.2, 1.2, 1.2, 4, 0xd8dee9);
                 createBox(1, 0.7 + i*1.3, -10, 1.2, 1.2, 1.2, 4, 0xe5e9f0);
             }
 
-            // 物理面条人
+            // 4. 组装高级 3D 软体面条人
             const playerGroup = new THREE.Group();
             const skinMat = new THREE.MeshStandardMaterial({ color: 0xf3f4f6, roughness: 0.7 });
+            
             const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.4, 1.4, 16), skinMat);
             torso.castShadow = true; playerGroup.add(torso);
+            
             const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), skinMat);
             head.position.y = 1.0; head.castShadow = true; playerGroup.add(head);
+            
             const armGeo = new THREE.CylinderGeometry(0.12, 0.12, 1.0, 8);
             const leftArm = new THREE.Mesh(armGeo, skinMat); leftArm.position.set(-0.65, 0.3, 0); playerGroup.add(leftArm);
             const rightArm = new THREE.Mesh(armGeo, skinMat); rightArm.position.set(0.65, 0.3, 0); playerGroup.add(rightArm);
             scene.add(playerGroup);
 
+            // 玩家物理底座刚体
             const playerBody = new CANNON.Body({ mass: 70, material: baseMaterial });
             playerBody.addShape(new CANNON.Box(new CANNON.Vec3(0.5, 1.1, 0.5)));
             playerBody.position.set(0, 4, 6);
             playerBody.angularDamping = 0.95;
             world.addBody(playerBody);
 
-            // 相机视角逻辑
+            // 5. 高度还原：鼠标视角环绕逻辑
             let camAngleX = 0; let isDragging = false;
             window.addEventListener('mousedown', () => isDragging = true);
             window.addEventListener('mouseup', () => isDragging = false);
-            window.addEventListener('mousemove', (e) => { if (isDragging) camAngleX -= e.movementX * 0.007; });
+            window.addEventListener('mousemove', (e) => { if (isDragging) camAngleX -= e.movementX * 0.005; });
 
+            // 移动键位监听
             const keys = { w: false, a: false, s: false, d: false, space: false };
             window.addEventListener('keydown', (e) => { toggleKey(e, true); });
             window.addEventListener('keyup', (e) => { toggleKey(e, false); });
@@ -197,64 +223,83 @@
                 }
             }
 
+            // 6. 核心游戏循环渲染器（全面采用安全赋值，防止任何潜在崩溃）
             const timeStep = 1 / 60; let waveClock = 0;
+            
             function runEngine() {
-                requestAnimationFrame(runEngine);
-                world.step(timeStep);
+                try {
+                    requestAnimationFrame(runEngine);
+                    world.step(timeStep);
 
-                let moveX = 0; let moveZ = 0;
-                let forwardX = -Math.sin(camAngleX); let forwardZ = -Math.cos(camAngleX);
-                let rightX = -Math.cos(camAngleX); let rightZ = Math.sin(camAngleX);
+                    // 计算相机视角矩阵，映射玩家走动朝向
+                    let moveX = 0; let moveZ = 0;
+                    let forwardX = -Math.sin(camAngleX); let forwardZ = -Math.cos(camAngleX);
+                    let rightX = -Math.cos(camAngleX); let rightZ = Math.sin(camAngleX);
 
-                if (keys.w) { moveX += forwardX; moveZ += forwardZ; }
-                if (keys.s) { moveX -= forwardX; moveZ -= forwardZ; }
-                if (keys.a) { moveX -= rightX; moveZ -= rightZ; }
-                if (keys.d) { moveX += rightX; moveZ += rightZ; }
+                    if (keys.w) { moveX += forwardX; moveZ += forwardZ; }
+                    if (keys.s) { moveX -= forwardX; moveZ -= forwardZ; }
+                    if (keys.a) { moveX -= rightX; moveZ -= rightZ; }
+                    if (keys.d) { moveX += rightX; moveZ += rightZ; }
 
-                let moveLen = Math.sqrt(moveX*moveX + moveZ*moveZ);
-                if (moveLen > 0) {
-                    playerBody.velocity.x = (moveX / moveLen) * 6;
-                    playerBody.velocity.z = (moveZ / moveLen) * 6;
-                } else {
-                    playerBody.velocity.x = 0; playerBody.velocity.z = 0;
+                    let moveLen = Math.sqrt(moveX*moveX + moveZ*moveZ);
+                    if (moveLen > 0) {
+                        playerBody.velocity.x = (moveX / moveLen) * 6;
+                        playerBody.velocity.z = (moveZ / moveLen) * 6;
+                    } else {
+                        playerBody.velocity.x = 0; playerBody.velocity.z = 0;
+                    }
+
+                    // 快乐弹跳
+                    if (keys.space && Math.abs(playerBody.velocity.y) < 0.1 && playerBody.position.y < 1.5) {
+                        playerBody.velocity.y = 7.5;
+                    }
+
+                    // 【核心安全修改】：采用精确的 .set() 坐标同步，杜绝跨库格式导致的黑屏崩溃
+                    playerGroup.position.set(playerBody.position.x, playerBody.position.y, playerBody.position.z);
+                    
+                    if (moveLen > 0) {
+                        waveClock += 0.25;
+                        playerGroup.rotation.z = Math.sin(waveClock) * 0.12;
+                        playerGroup.rotation.x = Math.cos(waveClock) * 0.08 - 0.08;
+                        playerGroup.rotation.y = Math.atan2(-playerBody.velocity.x, -playerBody.velocity.z);
+                        leftArm.rotation.x = Math.sin(waveClock) * 0.6;
+                        rightArm.rotation.x = -Math.sin(waveClock) * 0.6;
+                    } else {
+                        waveClock += 0.04;
+                        playerGroup.rotation.z = Math.sin(waveClock) * 0.03; playerGroup.rotation.x = 0;
+                        leftArm.rotation.x = Math.sin(waveClock) * 0.05; rightArm.rotation.x = Math.cos(waveClock) * 0.05;
+                    }
+
+                    // 【核心安全修改】：大门与箱子的物理坐标安全解耦同步
+                    for (let i = 0; i < physicsObjects.length; i++) {
+                        const b = physicsObjects[i].body;
+                        const m = physicsObjects[i].mesh;
+                        m.position.set(b.position.x, b.position.y, b.position.z);
+                        m.quaternion.set(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w);
+                    }
+
+                    // 第三人称相机平滑环绕算法
+                    const radius = 11;
+                    camera.position.x = playerBody.position.x + radius * Math.sin(camAngleX);
+                    camera.position.y = playerBody.position.y + 5.5;
+                    camera.position.z = playerBody.position.z + radius * Math.cos(camAngleX);
+                    camera.lookAt(playerBody.position.x, playerBody.position.y + 0.5, playerBody.position.z);
+
+                    // 最终画布输出
+                    renderer.render(scene, camera);
+                } catch (loopError) {
+                    showError("主循环内渲染失败: " + loopError.message);
                 }
-
-                if (keys.space && Math.abs(playerBody.velocity.y) < 0.1 && playerBody.position.y < 1.5) playerBody.velocity.y = 7.5;
-
-                playerGroup.position.copy(playerBody.position);
-                
-                if (moveLen > 0) {
-                    waveClock += 0.25;
-                    playerGroup.rotation.z = Math.sin(waveClock) * 0.12;
-                    playerGroup.rotation.x = Math.cos(waveClock) * 0.08 - 0.08;
-                    playerGroup.rotation.y = Math.atan2(-playerBody.velocity.x, -playerBody.velocity.z);
-                    leftArm.rotation.x = Math.sin(waveClock) * 0.6;
-                    rightArm.rotation.x = -Math.sin(waveClock) * 0.6;
-                } else {
-                    waveClock += 0.04;
-                    playerGroup.rotation.z = Math.sin(waveClock) * 0.03; playerGroup.rotation.x = 0;
-                    leftArm.rotation.x = Math.sin(waveClock) * 0.05; rightArm.rotation.x = Math.cos(waveClock) * 0.05;
-                }
-
-                for (let i = 0; i < physicsObjects.length; i++) {
-                    physicsObjects[i].mesh.position.copy(physicsObjects[i].body.position);
-                    physicsObjects[i].mesh.quaternion.copy(physicsObjects[i].body.quaternion);
-                }
-
-                const radius = 11;
-                camera.position.x = playerBody.position.x + radius * Math.sin(camAngleX);
-                camera.position.y = playerBody.position.y + 5.5;
-                camera.position.z = playerBody.position.z + radius * Math.cos(camAngleX);
-                camera.lookAt(playerBody.position.x, playerBody.position.y + 0.5, playerBody.position.z);
-
-                renderer.render(scene, camera);
             }
 
+            // 自适应屏幕变化
             window.addEventListener('resize', () => {
-                camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
                 renderer.setSize(window.innerWidth, window.innerHeight);
             });
 
+            // 轰鸣起航
             runEngine();
         }
     </script>
