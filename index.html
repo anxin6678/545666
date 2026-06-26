@@ -3,240 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Html版人类一败涂地模拟器</title>
+    <title>人类一败涂地 3D Web版 (高度还原)</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #a0c0ff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #dbe4eb;
+            font-family: 'Segoe UI', sans-serif;
+            user-select: none;
         }
         #ui {
             position: absolute;
             top: 20px;
             left: 20px;
-            color: #fff;
-            background: rgba(0, 0, 0, 0.6);
+            color: #333;
+            background: rgba(255, 255, 255, 0.85);
             padding: 15px 25px;
-            border-radius: 10px;
+            border-radius: 12px;
             pointer-events: none;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.4);
         }
-        h1 { margin: 0 0 10px 0; font-size: 20px; color: #ffeb3b; }
-        p { margin: 5px 0; font-size: 14px; }
+        h1 { margin: 0 0 8px 0; font-size: 18px; color: #4a5568; }
+        p { margin: 4px 0; font-size: 13px; color: #718096; }
+        #canvas-container { width: 100vw; height: 100vh; }
     </style>
+    <!-- 引入稳定版 Three.js 和 Cannon.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.0.8/cannon.min.js"></script>
 </head>
 <body>
 
     <div id="ui">
-        <h1>人类一败涂地 - Web页 3D 物理版</h1>
-        <p>控制：W A S D 移动</p>
-        <p>动作：SPACE (空格) 快乐起跳</p>
-        <p>特性：纯3D物理反馈、摇晃面条人、可推搡方块</p>
+        <h1>人类一败涂地 (Human Web Simulator)</h1>
+        <p>🕹️ <b>移动：</b>W A S D (基于相机视角)</p>
+        <p>👀 <b>视角：</b>点击画面并拖拽鼠标 360° 旋转</p>
+        <p>🖐️ <b>灵魂抓取：</b>按住【鼠标左键】举起双手</p>
+        <p>🦘 <b>跳跃：</b>【空格键】快乐起跳</p>
     </div>
 
+    <div id="canvas-container"></div>
+
     <script>
-        // --- 1. 初始化 3D 场景 (Three.js) ---
+        // --- 1. 基础场景与物理引擎初始化 ---
+        const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xa0c0ff);
-        scene.fog = new THREE.FogExp2(0xa0c0ff, 0.015);
+        scene.background = new THREE.Color(0xdbe4eb); // 还原游戏标志性灰蓝色天空
+        scene.fog = new THREE.FogExp2(0xdbe4eb, 0.012);
 
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        document.body.appendChild(renderer.domElement);
+        container.appendChild(renderer.domElement);
 
-        // 灯光
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        // 柔和的低模光影
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(20, 40, 20);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        dirLight.position.set(30, 50, 20);
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048;
         dirLight.shadow.mapSize.height = 2048;
         dirLight.shadow.camera.near = 0.5;
-        dirLight.shadow.camera.far = 100;
-        const d = 20;
-        dirLight.shadow.camera.left = -d;
-        dirLight.shadow.camera.right = d;
-        dirLight.shadow.camera.top = d;
-        dirLight.shadow.camera.bottom = -d;
-        scene.add(dirLight);
-
-        // --- 2. 初始化物理世界 (Cannon.js) ---
-        const world = new CANNON.World();
-        world.gravity.set(0, -18.82, 0); // 略微加重重力，让物理感更扎实
-        world.broadphase = new CANNON.NaiveBroadphase();
-        world.solver.iterations = 10;
-
-        // 材质摩擦力设置
-        const groundMaterial = new CANNON.Material("groundMaterial");
-        const slipperyMaterial = new CANNON.Material("slipperyMaterial");
-        const contactMaterial = new CANNON.ContactMaterial(groundMaterial, slipperyMaterial, {
-            friction: 0.2,
-            restitution: 0.3
-        });
-        world.addContactMaterial(contactMaterial);
-
-        // --- 3. 创建地面 ---
-        // 物理地面
-        const groundShape = new CANNON.Plane();
-        const groundBody = new CANNON.Body({ mass: 0, material: groundMaterial });
-        groundBody.addShape(groundShape);
-        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
-        world.addBody(groundBody);
-        // 视觉地面
-        const groundGeo = new THREE.PlaneGeometry(100, 100);
-        const groundMat = new THREE.MeshStandardMaterial({ color: 0x76a350, roughness: 0.8 });
-        const groundMesh = new THREE.Mesh(groundGeo, groundMat);
-        groundMesh.rotation.x = -Math.PI / 2;
-        groundMesh.receiveShadow = true;
-        scene.add(groundMesh);
-
-        // --- 4. 创建可互动的物理障碍物 (箱子) ---
-        const boxes = [];
-        const boxGeometry = new THREE.BoxGeometry(2, 2, 2);
-        
-        function createBox(x, y, z, color = 0xdd8855) {
-            const boxMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4 });
-            const mesh = new THREE.Mesh(boxGeometry, boxMat);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            scene.add(mesh);
-
-            const shape = new CANNON.Box(new CANNON.Vec3(1, 1, 1));
-            const body = new CANNON.Body({ mass: 5, material: groundMaterial }); // mass>0 才能被推开
-            body.addShape(shape);
-            body.position.set(x, y, z);
-            world.addBody(body);
-
-            boxes.push({ mesh, body });
-        }
-
-        // 随机叠放一些箱子
-        for(let i=0; i<8; i++) createBox(0, 1 + i*2.1, -5, 0xdd8855);
-        for(let i=0; i<5; i++) createBox(3, 1 + i*2.1, -3, 0x5588dd);
-        for(let i=0; i<3; i++) createBox(-4, 1, -2, 0x88dd55);
-
-        // --- 5. 创建面条人（核心角色） ---
-        // 为了还原“晃荡”感，角色由多部分组成，或者对其施加不平衡的物理力
-        const playerGroup = new THREE.Group();
-        
-        // 身体
-        const bodyGeo = new THREE.CylinderGeometry(0.6, 0.6, 1.8, 16);
-        const playerMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
-        const bodyMesh = new THREE.Mesh(bodyGeo, playerMat);
-        bodyMesh.castShadow = true;
-        playerGroup.add(bodyMesh);
-
-        // 呆萌的眼睛
-        const eyeGeo = new THREE.SphereGeometry(0.1, 8, 8);
-        const eyeMat = new THREE.MeshBasicMaterial({color: 0x000000});
-        const leftEye = new THREE.Mesh(eyeGeo, eyeMat); leftEye.position.set(0.2, 0.6, 0.5);
-        const rightEye = new THREE.Mesh(eyeGeo, eyeMat); rightEye.position.set(-0.2, 0.6, 0.5);
-        playerGroup.add(leftEye, rightEye);
-        scene.add(playerGroup);
-
-        // 玩家物理实体 (使用球形或胶囊体底座防止卡住)
-        const playerShape = new CANNON.Sphere(0.8);
-        const playerBody = new CANNON.Body({ mass: 60, material: slipperyMaterial });
-        playerBody.addShape(shape = new CANNON.Box(new CANNON.Vec3(0.5, 0.9, 0.5)));
-        playerBody.position.set(0, 5, 5);
-        // 限制旋转，不让其完全滚倒，但保留微小的阻尼晃动感
-        playerBody.angularDamping = 0.99; 
-        world.addBody(playerBody);
-
-        // --- 6. 键盘输入控制 ---
-        const keys = { w: false, a: false, s: false, d: false, space: false };
-        window.addEventListener('keydown', (e) => { handleKey(e, true); });
-        window.addEventListener('keyup', (e) => { handleKey(e, false); });
-
-        function handleKey(e, isDown) {
-            switch (e.code) {
-                case 'KeyW': keys.w = isDown; break;
-                case 'KeyA': keys.a = isDown; break;
-                case 'KeyS': keys.s = isDown; break;
-                case 'KeyD': keys.d = isDown; break;
-                case 'Space': keys.space = isDown; break;
-            }
-        }
-
-        // --- 7. 游戏主循环 ---
-        const timeStep = 1 / 60;
-        let wobbleTime = 0;
-
-        function animate() {
-            requestAnimationFrame(animate);
-
-            // 更新物理世界
-            world.step(timeStep);
-
-            // 玩家移动逻辑
-            const moveSpeed = 7;
-            let forceX = 0;
-            let forceZ = 0;
-
-            if (keys.w) forceZ -= moveSpeed;
-            if (keys.s) forceZ += moveSpeed;
-            if (keys.a) forceX -= moveSpeed;
-            if (keys.d) forceX += moveSpeed;
-
-            // 应用物理速度
-            playerBody.velocity.x = forceX;
-            playerBody.velocity.z = forceZ;
-
-            // 快乐起跳机制 (判断高度接近地面时可跳)
-            if (keys.space && Math.abs(playerBody.velocity.y) < 0.1 && playerBody.position.y < 1.5) {
-                playerBody.velocity.y = 8;
-            }
-
-            // 核心高度还原：模拟面条人的“晃荡”动画
-            playerGroup.position.copy(playerBody.position);
-            playerGroup.quaternion.copy(playerBody.quaternion);
-
-            if (forceX !== 0 || forceZ !== 0) {
-                wobbleTime += 0.2;
-                // 走路时让模型产生魔性的左右摇摆和前后倾斜
-                playerGroup.rotation.z = Math.sin(wobbleTime) * 0.15;
-                playerGroup.rotation.x = Math.cos(wobbleTime) * 0.1 - 0.1;
-                
-                // 朝向移动方向
-                const angle = Math.atan2(-forceX, -forceZ);
-                playerGroup.rotation.y = angle;
-            } else {
-                // 站立时微弱呼吸晃动
-                wobbleTime += 0.03;
-                playerGroup.rotation.z = Math.sin(wobbleTime) * 0.03;
-                playerGroup.rotation.x = 0;
-            }
-
-            // 同步所有箱子的物理位置与视觉模型
-            for (let i = 0; i < boxes.length; i++) {
-                boxes[i].mesh.position.copy(boxes[i].body.position);
-                boxes[i].mesh.quaternion.copy(boxes[i].body.quaternion);
-            }
-
-            // 相机动态跟随玩家
-            camera.position.set(playerBody.position.x, playerBody.position.y + 6, playerBody.position.z + 12);
-            camera.lookAt(playerBody.position);
-
-            // 渲染画面
-            renderer.render(scene, window.innerWidth);
-        }
-
-        // 窗口自适应
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        // 启动游戏
-        animate();
-    </script>
-</body>
-</html>
+        dirLight.shadow.camera.far = 150;
+        const d = 30;Normally I can help with things like this, but I don't seem to have access to that content. You can try again or ask me for something else.
