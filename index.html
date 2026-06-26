@@ -3,184 +3,240 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>第五人格 2D P2P 联机版</title>
+    <title>Html版人类一败涂地模拟器</title>
     <style>
-        body { margin: 0; background: #1a1a1a; color: #fff; font-family: sans-serif; text-align: center; }
-        #setup-ui { padding: 20px; }
-        canvas { border: 4px solid #333; background: #222; display: none; margin: 10px auto; }
-        .btn { padding: 10px 20px; background: #8b0000; color: white; border: none; cursor: pointer; font-size: 16px; }
-        .btn:hover { background: #ff0000; }
-        #status { color: #ffcc00; margin: 10px; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #a0c0ff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px 25px;
+            border-radius: 10px;
+            pointer-events: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        h1 { margin: 0 0 10px 0; font-size: 20px; color: #ffeb3b; }
+        p { margin: 5px 0; font-size: 14px; }
     </style>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.0.8/cannon.min.js"></script>
 </head>
 <body>
 
-    <h1>第五人格 2D 联机网页版</h1>
-    
-    <div id="setup-ui">
-        <h3>第一步：选择你的阵营</h3>
-        <button class="btn" onclick="chooseRole('hunter')">成为监管者 (厂长)</button>
-        <button class="btn" onclick="chooseRole('survivor')">成为求生者 (园丁)</button>
-        
-        <br><br>
-        <h3>第二步：创建或加入房间</h3>
-        <p>你的联机ID: <span id="my-id">正在生成...</span></p>
-        <button class="btn" onclick="startHost()">创建房间 (作为房主)</button>
-        <br><br>
-        <input type="text" id="join-id" placeholder="输入房主的联机ID" style="padding: 10px; width: 200px;">
-        <button class="btn" onclick="joinRoom()">加入房间</button>
+    <div id="ui">
+        <h1>人类一败涂地 - Web页 3D 物理版</h1>
+        <p>控制：W A S D 移动</p>
+        <p>动作：SPACE (空格) 快乐起跳</p>
+        <p>特性：纯3D物理反馈、摇晃面条人、可推搡方块</p>
     </div>
 
-    <div id="status"></div>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
-
     <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        let peer, conn;
-        let role = 'survivor'; 
-        let isHost = false;
+        // --- 1. 初始化 3D 场景 (Three.js) ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xa0c0ff);
+        scene.fog = new THREE.FogExp2(0xa0c0ff, 0.015);
 
-        // 游戏世界数据
-        let player = { x: 100, y: 100, size: 20, color: '#3399ff', speed: 4 };
-        let remotePlayer = { x: -100, y: -100, size: 24, color: '#ff3333', speed: 5 }; // 远端玩家
-        let cipher = { x: 400, y: 300, size: 40, progress: 0, completed: false };
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
 
-        // 初始化 PeerJS
-        peer = new Peer();
-        peer.on('open', (id) => {
-            document.getElementById('my-id').innerText = id;
+        // 灯光
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(20, 40, 20);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 100;
+        const d = 20;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        // --- 2. 初始化物理世界 (Cannon.js) ---
+        const world = new CANNON.World();
+        world.gravity.set(0, -18.82, 0); // 略微加重重力，让物理感更扎实
+        world.broadphase = new CANNON.NaiveBroadphase();
+        world.solver.iterations = 10;
+
+        // 材质摩擦力设置
+        const groundMaterial = new CANNON.Material("groundMaterial");
+        const slipperyMaterial = new CANNON.Material("slipperyMaterial");
+        const contactMaterial = new CANNON.ContactMaterial(groundMaterial, slipperyMaterial, {
+            friction: 0.2,
+            restitution: 0.3
+        });
+        world.addContactMaterial(contactMaterial);
+
+        // --- 3. 创建地面 ---
+        // 物理地面
+        const groundShape = new CANNON.Plane();
+        const groundBody = new CANNON.Body({ mass: 0, material: groundMaterial });
+        groundBody.addShape(groundShape);
+        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+        world.addBody(groundBody);
+        // 视觉地面
+        const groundGeo = new THREE.PlaneGeometry(100, 100);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x76a350, roughness: 0.8 });
+        const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+        groundMesh.rotation.x = -Math.PI / 2;
+        groundMesh.receiveShadow = true;
+        scene.add(groundMesh);
+
+        // --- 4. 创建可互动的物理障碍物 (箱子) ---
+        const boxes = [];
+        const boxGeometry = new THREE.BoxGeometry(2, 2, 2);
+        
+        function createBox(x, y, z, color = 0xdd8855) {
+            const boxMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4 });
+            const mesh = new THREE.Mesh(boxGeometry, boxMat);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+
+            const shape = new CANNON.Box(new CANNON.Vec3(1, 1, 1));
+            const body = new CANNON.Body({ mass: 5, material: groundMaterial }); // mass>0 才能被推开
+            body.addShape(shape);
+            body.position.set(x, y, z);
+            world.addBody(body);
+
+            boxes.push({ mesh, body });
+        }
+
+        // 随机叠放一些箱子
+        for(let i=0; i<8; i++) createBox(0, 1 + i*2.1, -5, 0xdd8855);
+        for(let i=0; i<5; i++) createBox(3, 1 + i*2.1, -3, 0x5588dd);
+        for(let i=0; i<3; i++) createBox(-4, 1, -2, 0x88dd55);
+
+        // --- 5. 创建面条人（核心角色） ---
+        // 为了还原“晃荡”感，角色由多部分组成，或者对其施加不平衡的物理力
+        const playerGroup = new THREE.Group();
+        
+        // 身体
+        const bodyGeo = new THREE.CylinderGeometry(0.6, 0.6, 1.8, 16);
+        const playerMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+        const bodyMesh = new THREE.Mesh(bodyGeo, playerMat);
+        bodyMesh.castShadow = true;
+        playerGroup.add(bodyMesh);
+
+        // 呆萌的眼睛
+        const eyeGeo = new THREE.SphereGeometry(0.1, 8, 8);
+        const eyeMat = new THREE.MeshBasicMaterial({color: 0x000000});
+        const leftEye = new THREE.Mesh(eyeGeo, eyeMat); leftEye.position.set(0.2, 0.6, 0.5);
+        const rightEye = new THREE.Mesh(eyeGeo, eyeMat); rightEye.position.set(-0.2, 0.6, 0.5);
+        playerGroup.add(leftEye, rightEye);
+        scene.add(playerGroup);
+
+        // 玩家物理实体 (使用球形或胶囊体底座防止卡住)
+        const playerShape = new CANNON.Sphere(0.8);
+        const playerBody = new CANNON.Body({ mass: 60, material: slipperyMaterial });
+        playerBody.addShape(shape = new CANNON.Box(new CANNON.Vec3(0.5, 0.9, 0.5)));
+        playerBody.position.set(0, 5, 5);
+        // 限制旋转，不让其完全滚倒，但保留微小的阻尼晃动感
+        playerBody.angularDamping = 0.99; 
+        world.addBody(playerBody);
+
+        // --- 6. 键盘输入控制 ---
+        const keys = { w: false, a: false, s: false, d: false, space: false };
+        window.addEventListener('keydown', (e) => { handleKey(e, true); });
+        window.addEventListener('keyup', (e) => { handleKey(e, false); });
+
+        function handleKey(e, isDown) {
+            switch (e.code) {
+                case 'KeyW': keys.w = isDown; break;
+                case 'KeyA': keys.a = isDown; break;
+                case 'KeyS': keys.s = isDown; break;
+                case 'KeyD': keys.d = isDown; break;
+                case 'Space': keys.space = isDown; break;
+            }
+        }
+
+        // --- 7. 游戏主循环 ---
+        const timeStep = 1 / 60;
+        let wobbleTime = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 更新物理世界
+            world.step(timeStep);
+
+            // 玩家移动逻辑
+            const moveSpeed = 7;
+            let forceX = 0;
+            let forceZ = 0;
+
+            if (keys.w) forceZ -= moveSpeed;
+            if (keys.s) forceZ += moveSpeed;
+            if (keys.a) forceX -= moveSpeed;
+            if (keys.d) forceX += moveSpeed;
+
+            // 应用物理速度
+            playerBody.velocity.x = forceX;
+            playerBody.velocity.z = forceZ;
+
+            // 快乐起跳机制 (判断高度接近地面时可跳)
+            if (keys.space && Math.abs(playerBody.velocity.y) < 0.1 && playerBody.position.y < 1.5) {
+                playerBody.velocity.y = 8;
+            }
+
+            // 核心高度还原：模拟面条人的“晃荡”动画
+            playerGroup.position.copy(playerBody.position);
+            playerGroup.quaternion.copy(playerBody.quaternion);
+
+            if (forceX !== 0 || forceZ !== 0) {
+                wobbleTime += 0.2;
+                // 走路时让模型产生魔性的左右摇摆和前后倾斜
+                playerGroup.rotation.z = Math.sin(wobbleTime) * 0.15;
+                playerGroup.rotation.x = Math.cos(wobbleTime) * 0.1 - 0.1;
+                
+                // 朝向移动方向
+                const angle = Math.atan2(-forceX, -forceZ);
+                playerGroup.rotation.y = angle;
+            } else {
+                // 站立时微弱呼吸晃动
+                wobbleTime += 0.03;
+                playerGroup.rotation.z = Math.sin(wobbleTime) * 0.03;
+                playerGroup.rotation.x = 0;
+            }
+
+            // 同步所有箱子的物理位置与视觉模型
+            for (let i = 0; i < boxes.length; i++) {
+                boxes[i].mesh.position.copy(boxes[i].body.position);
+                boxes[i].mesh.quaternion.copy(boxes[i].body.quaternion);
+            }
+
+            // 相机动态跟随玩家
+            camera.position.set(playerBody.position.x, playerBody.position.y + 6, playerBody.position.z + 12);
+            camera.lookAt(playerBody.position);
+
+            // 渲染画面
+            renderer.render(scene, window.innerWidth);
+        }
+
+        // 窗口自适应
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // 阵营选择
-        function chooseRole(selected) {
-            role = selected;
-            if(role === 'hunter') {
-                player.color = '#ff3333';
-                player.speed = 5;
-                player.size = 24;
-            } else {
-                player.color = '#3399ff';
-                player.speed = 4;
-                player.size = 20;
-            }
-            document.getElementById('status').innerText = `已选择阵营：${role === 'hunter'?'监管者':'求生者'}`;
-        }
-
-        // 房主启动
-        function startHost() {
-            isHost = true;
-            document.getElementById('status').innerText = "房间已创建，等待求生者/监管者加入...";
-            peer.on('connection', (connection) => {
-                conn = connection;
-                setupConnection();
-            });
-            startGameLoop();
-        }
-
-        // 玩家加入
-        function joinRoom() {
-            const targetId = document.getElementById('join-id').value;
-            if(!targetId) return alert("请输入房主ID！");
-            
-            document.getElementById('status').innerText = "正在连接房主...";
-            conn = peer.connect(targetId);
-            setupConnection();
-            startGameLoop();
-        }
-
-        // 设置数据通道
-        function setupConnection() {
-            document.getElementById('setup-ui').style.display = 'none';
-            canvas.style.display = 'block';
-            document.getElementById('status').innerText = "联机成功！游戏开始！使用 WASD 或方向键移动。";
-
-            conn.on('data', (data) => {
-                // 接收对方的位置和状态
-                remotePlayer.x = data.x;
-                remotePlayer.y = data.y;
-                cipher.progress = data.cipherProgress;
-                cipher.completed = data.cipherCompleted;
-            });
-        }
-
-        // 键盘监听
-        let keys = {};
-        window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
-        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
-
-        // 核心游戏循环
-        function startGameLoop() {
-            update();
-            render();
-            requestAnimationFrame(startGameLoop);
-        }
-
-        function update() {
-            // 控制自己移动
-            if (keys['w'] || keys['arrowup']) player.y -= player.speed;
-            if (keys['s'] || keys['arrowdown']) player.y += player.speed;
-            if (keys['a'] || keys['arrowleft']) player.x -= player.speed;
-            if (keys['d'] || keys['arrowright']) player.x += player.speed;
-
-            // 边界碰撞
-            player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
-            player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
-
-            // 求生者修机逻辑
-            if (role === 'survivor' && !cipher.completed) {
-                let dist = Math.hypot(player.x - cipher.x, player.y - cipher.y);
-                if (dist < 50) {
-                    cipher.progress += 0.2; // 正在修机
-                    if (cipher.progress >= 100) cipher.completed = true;
-                }
-            }
-
-            // 监管者抓人判定 (简单距离碰撞)
-            let huntDist = Math.hypot(player.x - remotePlayer.x, player.y - remotePlayer.y);
-            if (huntDist < (player.size + remotePlayer.size)) {
-                if(role === 'hunter') {
-                    document.getElementById('status').innerText = "你抓到了求生者！监管者胜利！";
-                }
-            }
-
-            // 发送自己的位置给对方
-            if (conn && conn.open) {
-                conn.send({
-                    x: player.x,
-                    y: player.y,
-                    cipherProgress: cipher.progress,
-                    cipherCompleted: cipher.completed
-                });
-            }
-        }
-
-        function render() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // 1. 画密码机
-            ctx.fillStyle = cipher.completed ? '#00ff00' : '#ffff00';
-            ctx.fillRect(cipher.x - cipher.size/2, cipher.y - cipher.size/2, cipher.size, cipher.size);
-            ctx.fillStyle = '#fff';
-            ctx.fillText(cipher.completed ? "密码机已破译" : `破译进度: ${Math.floor(cipher.progress)}%`, cipher.x - 40, cipher.y - 30);
-
-            // 2. 画自己
-            ctx.beginPath();
-            ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
-            ctx.fillStyle = player.color;
-            ctx.fill();
-            ctx.closePath();
-            ctx.fillText("你", player.x - 5, player.y - player.size - 5);
-
-            // 3. 画对手
-            ctx.beginPath();
-            ctx.arc(remotePlayer.x, remotePlayer.y, remotePlayer.size, 0, Math.PI * 2);
-            ctx.fillStyle = remotePlayer.color;
-            ctx.fill();
-            ctx.closePath();
-            ctx.fillText("对手", remotePlayer.x - 10, remotePlayer.y - remotePlayer.size - 5);
-        }
+        // 启动游戏
+        animate();
     </script>
 </body>
 </html>
