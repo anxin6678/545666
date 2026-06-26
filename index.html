@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>人类一败涂地 3D Web版 (高度还原)</title>
+    <title>人类一败涂地 3D Web版 (高度还原修复版)</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
             background-color: #dbe4eb;
-            font-family: 'Segoe UI', sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             user-select: none;
+            -webkit-user-select: none;
         }
         #ui {
             position: absolute;
@@ -21,51 +22,63 @@
             padding: 15px 25px;
             border-radius: 12px;
             pointer-events: none;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            border: 1px solid rgba(255,255,255,0.4);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.5);
+            line-height: 1.6;
         }
-        h1 { margin: 0 0 8px 0; font-size: 18px; color: #4a5568; }
-        p { margin: 4px 0; font-size: 13px; color: #718096; }
-        #canvas-container { width: 100vw; height: 100vh; }
+        h1 { margin: 0 0 8px 0; font-size: 18px; color: #2d3748; }
+        p { margin: 4px 0; font-size: 13px; color: #4a5568; }
+        span { color: #3182ce; font-weight: bold; }
+        #loader {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #dbe4eb; display: flex; justify-content: center;
+            align-items: center; z-index: 999; font-size: 24px; color: #4a5568;
+            transition: opacity 0.5s;
+        }
     </style>
-    <!-- 引入稳定版 Three.js 和 Cannon.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.0.8/cannon.min.js"></script>
 </head>
 <body>
 
+    <div id="loader">正在加载 3D 物理世界...</div>
+
     <div id="ui">
-        <h1>人类一败涂地 (Human Web Simulator)</h1>
-        <p>🕹️ <b>移动：</b>W A S D (基于相机视角)</p>
-        <p>👀 <b>视角：</b>点击画面并拖拽鼠标 360° 旋转</p>
-        <p>🖐️ <b>灵魂抓取：</b>按住【鼠标左键】举起双手</p>
-        <p>🦘 <b>跳跃：</b>【空格键】快乐起跳</p>
+        <h1>人类一败涂地 - Web Simulator</h1>
+        <p>🕹️ <b>移动：</b><span>W A S D</span>（随视角自动转向）</p>
+        <p>👀 <b>视角：</b><span>按住鼠标左键并拖拽</span> 360°旋转镜头</p>
+        <p>🖐️ <b>灵魂动作：</b><span>按住鼠标右键 / 键盘 E 键</span> 高举双手</p>
+        <p>🦘 <b>跳跃：</b><span>空格键 (SPACE)</span> 魔性起跳</p>
     </div>
 
-    <div id="canvas-container"></div>
-
     <script>
-        // --- 1. 基础场景与物理引擎初始化 ---
-        const container = document.getElementById('canvas-container');
+        // --- 1. 场景基础设置 ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xdbe4eb); // 还原游戏标志性灰蓝色天空
-        scene.fog = new THREE.FogExp2(0xdbe4eb, 0.012);
+        scene.background = new THREE.Color(0xdbe4eb); // 标志性粘土蓝天空
+        scene.fog = new THREE.FogExp2(0xdbe4eb, 0.015);
 
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        container.appendChild(renderer.domElement);
+        document.body.appendChild(renderer.domElement);
 
-        // 柔和的低模光影
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        // 隐藏加载提示
+        document.getElementById('loader').style.opacity = 0;
+        setTimeout(() => document.getElementById('loader').remove(), 500);
+
+        // --- 2. 灯光系统（还原低模软阴影） ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
         scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-        dirLight.position.set(30, 50, 20);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(20, 40, 20);
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048;
         dirLight.shadow.mapSize.height = 2048;
         dirLight.shadow.camera.near = 0.5;
-        dirLight.shadow.camera.far = 150;
-        const d = 30;Normally I can help with things like this, but I don't seem to have access to that content. You can try again or ask me for something else.
+        dirLight.shadow.camera.far = 100;
+        const d = 25;
+        dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
+        dirLight.shadow.
